@@ -57,3 +57,14 @@ finally {
 
 Write-Host "--- staged artifact tree ($Stage) ---"
 Get-ChildItem -Recurse -File $Stage | ForEach-Object { $_.FullName }
+
+Write-Host "=== Smoke tests ==="
+$TestsSrc   = Join-Path $RepoRoot "tests"
+$TestsBuild = Join-Path (Get-Location) "tests-build"
+if (Test-Path $TestsBuild) { Remove-Item -Recurse -Force $TestsBuild }
+& cmake -S $TestsSrc -B $TestsBuild -G Ninja -DCMAKE_BUILD_TYPE=Release "-DSTAGE_DIR=$Stage"
+if ($LASTEXITCODE -ne 0) { throw "cmake configure (tests) failed" }
+& cmake --build $TestsBuild --config Release
+if ($LASTEXITCODE -ne 0) { throw "cmake build (tests) failed" }
+& ctest --test-dir $TestsBuild --output-on-failure
+if ($LASTEXITCODE -ne 0) { throw "ctest failed" }

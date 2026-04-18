@@ -44,6 +44,23 @@ REPRO_XCFLAGS="-ffile-prefix-map=$(cd "$SRC/.." && pwd)=."
 
 J="$(nproc_portable)"
 
+# Build + run the smoke tests against the freshly staged artifact.
+# Called only for native-host targets where the test binary can actually
+# be linked and executed on the CI runner (not Android/iOS/Emscripten).
+run_smoke_tests() {
+    local REPO_ROOT TESTS_SRC TESTS_BUILD
+    REPO_ROOT="$(cd "$SRC/.." && pwd)"
+    TESTS_SRC="$REPO_ROOT/tests"
+    TESTS_BUILD="$(pwd)/tests-build"
+
+    rm -rf "$TESTS_BUILD"
+    cmake -S "$TESTS_SRC" -B "$TESTS_BUILD" -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DSTAGE_DIR="$STAGE"
+    cmake --build "$TESTS_BUILD" --config Release --parallel
+    ctest --test-dir "$TESTS_BUILD" --output-on-failure
+}
+
 case "${TARGET:?TARGET env var is required}" in
 
     linux-x64)
@@ -54,6 +71,7 @@ case "${TARGET:?TARGET env var is required}" in
         cp "$SRC/libluajit.so" "$STAGE/lib/libluajit.so"
         cp "$SRC/libluajit.a"  "$STAGE/lib/$NAME_STATIC"
         stage_headers
+        run_smoke_tests
         ;;
 
     macos-universal)
@@ -76,6 +94,7 @@ case "${TARGET:?TARGET env var is required}" in
         lipo -create build-arm64/libluajit.a build-x86_64/libluajit.a \
              -output "$STAGE/lib/$NAME_STATIC"
         stage_headers
+        run_smoke_tests
         ;;
 
     windows-x64-mingw)
@@ -92,6 +111,7 @@ case "${TARGET:?TARGET env var is required}" in
             XCFLAGS="$REPRO_XCFLAGS"
         cp "$SRC/libluajit.a" "$STAGE/lib/$NAME_STATIC"
         stage_headers
+        run_smoke_tests
         ;;
 
     android-arm64|android-armv7|android-x86|android-x86_64)

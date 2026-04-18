@@ -106,6 +106,8 @@ jobs:
           install: >-
             ${{ matrix.msys-env }}-gcc
             ${{ matrix.msys-env }}-make
+            ${{ matrix.msys-env }}-cmake
+            ${{ matrix.msys-env }}-ninja
             make
 
       - name: Setup Xcode
@@ -122,6 +124,10 @@ jobs:
         shell: bash
         run: |
           echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)" >> "$GITHUB_ENV"
+
+      - name: Install Ninja (Linux)
+        if: runner.os == 'Linux' && !matrix.android && !matrix.emscripten
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
 
       - name: Install gcc-multilib (32-bit host builds)
         if: matrix.multilib
