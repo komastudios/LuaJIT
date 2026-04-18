@@ -1,0 +1,201 @@
+name: unity
+
+on:
+  push:
+    branches: [ "unity" ]
+  pull_request:
+    branches: [ "unity" ]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  BUILD_TYPE: Release
+  ZERO_AR_DATE: 1
+  SOURCE_DATE_EPOCH: 0
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: ${{ matrix.shell || 'bash' }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # --- Desktop ---
+          - name: "Linux (GCC)"
+            artifact: "linux-x64"
+            target: "linux-x64"
+            os: ubuntu-22.04
+            smoke: true
+          - name: "macOS (Clang, universal)"
+            artifact: "macos-universal"
+            target: "macos-universal"
+            os: macos-15
+            xcode: '16.4'
+            # No smoke test: macos-universal leaves src/luajit as the last arch
+            # (x86_64), which on arm64 runners needs Rosetta — skip to stay simple.
+          - name: "Windows (MSVC)"
+            artifact: "windows-x64"
+            target: "windows-x64"
+            os: windows-2022
+            shell: pwsh
+            msvc: true
+            smoke: true
+          - name: "Windows (MinGW)"
+            artifact: "windows-x64-mingw"
+            target: "windows-x64-mingw"
+            os: windows-2022
+            shell: 'msys2 {0}'
+            msystem: mingw64
+            msys-env: mingw-w64-x86_64
+
+          # --- Android ---
+          - name: "Android (arm64-v8a)"
+            artifact: "android-arm64"
+            target: "android-arm64"
+            os: ubuntu-22.04
+            android: true
+          - name: "Android (armeabi-v7a)"
+            artifact: "android-armv7"
+            target: "android-armv7"
+            os: ubuntu-22.04
+            android: true
+            multilib: true
+          - name: "Android (x86)"
+            artifact: "android-x86"
+            target: "android-x86"
+            os: ubuntu-22.04
+            android: true
+            multilib: true
+          - name: "Android (x86_64)"
+            artifact: "android-x86_64"
+            target: "android-x86_64"
+            os: ubuntu-22.04
+            android: true
+
+          # --- iOS ---
+          - name: "iOS (arm64)"
+            artifact: "ios-arm64"
+            target: "ios-arm64"
+            os: macos-15
+            xcode: '16.4'
+
+          # --- Web (Emscripten) ---
+          # LuaJIT has no WASM backend, so this artifact ships vendored
+          # vanilla Lua 5.1.5 (ABI-compatible with LuaJIT at the lua_* level)
+          # built with emcc. See vendor/lua5.1/ and build-luajit.sh.
+          - name: "Emscripten (wasm32, vanilla Lua 5.1.5)"
+            artifact: "emscripten-wasm"
+            target: "emscripten-wasm"
+            os: ubuntu-22.04
+            emscripten: true
+
+    steps:
+      - name: Set up MSYS2
+        if: matrix.msystem
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: ${{ matrix.msystem }}
+          install: >-
+            ${{ matrix.msys-env }}-gcc
+            ${{ matrix.msys-env }}-make
+            make
+
+      - name: Setup Xcode
+        if: matrix.xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: ${{ matrix.xcode }}
+
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Set Deterministic Environment
+        shell: bash
+        run: |
+          echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)" >> "$GITHUB_ENV"
+
+      - name: Install gcc-multilib (32-bit host builds)
+        if: matrix.multilib
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-multilib
+
+      - name: Set up NDK
+        if: matrix.android
+        uses: nttld/setup-ndk@v1
+        id: setup_ndk
+        with:
+          ndk-version: r23b
+
+      - name: Export ANDROID_NDK_HOME
+        if: matrix.android
+        run: echo "ANDROID_NDK_HOME=${{ steps.setup_ndk.outputs.ndk-path }}" >> "$GITHUB_ENV"
+
+      - name: Set up Emscripten
+        if: matrix.emscripten
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 3.1.8
+
+      - name: Prime MSVC environment
+        if: matrix.msvc
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Build (POSIX)
+        if: ${{ !matrix.msvc && !matrix.msystem }}
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+          STAGE: ${{ github.workspace }}/dist
+        run: |
+          chmod +x ./.github/scripts/build-luajit.sh
+          ./.github/scripts/build-luajit.sh
+
+      - name: Build (MinGW / MSYS2)
+        if: matrix.msystem
+        shell: 'msys2 {0}'
+        env:
+          TARGET: ${{ matrix.target }}
+          STAGE: ${{ github.workspace }}/dist
+        run: |
+          chmod +x ./.github/scripts/build-luajit.sh
+          ./.github/scripts/build-luajit.sh
+
+      - name: Build (MSVC)
+        if: matrix.msvc
+        shell: pwsh
+        run: ./.github/scripts/build-luajit-msvc.ps1 -Stage "${{ github.workspace }}/dist"
+
+      - name: Smoke test
+        if: matrix.smoke && !matrix.msvc
+        shell: bash
+        run: |
+          if [ -x ./src/luajit ]; then
+            ./src/luajit -e 'print(_VERSION); print(jit.status())'
+          fi
+
+      - name: Smoke test (MSVC)
+        if: matrix.smoke && matrix.msvc
+        shell: pwsh
+        run: |
+          if (Test-Path ./src/luajit.exe) {
+            ./src/luajit.exe -e "print(_VERSION); print(jit.status())"
+          }
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist
+          if-no-files-found: error

@@ -1,0 +1,17 @@
+Lua 5.1.5
+
+Upstream:   https://www.lua.org/ftp/lua-5.1.5.tar.gz
+Released:   2012-02-13
+SHA-256:    2640fc56a795f29d28ef15e13c34a47e223960b0240e8cb0a82d9b0738695333
+
+Vendored here because LuaJIT has no WebAssembly backend (its VM is hand-written
+assembly per target architecture). Vanilla Lua 5.1.x is API + ABI compatible
+with LuaJIT at the lua_* / luaL_* symbol level, so downstream P/Invoke and
+C callers link unchanged. Used only by the emscripten-wasm CI target — all
+other platforms build LuaJIT from ../src/.
+
+To refresh:
+    curl -O https://www.lua.org/ftp/lua-5.1.5.tar.gz
+    tar -xzf lua-5.1.5.tar.gz
+    cp lua-5.1.5/src/*.{c,h} vendor/lua5.1/src/
+    cp lua-5.1.5/{COPYRIGHT,README,HISTORY} vendor/lua5.1/
