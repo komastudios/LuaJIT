@@ -170,14 +170,13 @@ case "${TARGET:?TARGET env var is required}" in
                     -I"$LUAVENDOR" \
                     -c "$LUAVENDOR/$src" -o "${src%.c}.o"
             done
-            emar rcs liblua5.1-static.a *.o
+            emar rcs liblua-static.a *.o
         )
 
-        # Use a distinct filename (liblua5.1-static.a, not libluajit-static.a)
-        # because the artifact is vanilla Lua 5.1.5, not LuaJIT. download_plugins.ps1
-        # still maps it to libluajit.a on the Unity WebGL side for drop-in linking.
+        # Distinct filename (liblua-static.a, not libluajit-static.a) because
+        # the artifact is vanilla Lua, not LuaJIT.
         mkdir -p "$STAGE/lib"
-        cp "$BUILD_DIR/liblua5.1-static.a" "$STAGE/lib/liblua5.1-static.a"
+        cp "$BUILD_DIR/liblua-static.a" "$STAGE/lib/liblua-static.a"
         stage_headers_vendored_lua "$LUAVENDOR"
         ;;
 
