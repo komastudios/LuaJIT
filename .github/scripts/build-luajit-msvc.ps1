@@ -31,29 +31,44 @@ New-Item -ItemType Directory -Force -Path $Stage,(Join-Path $Stage "bin"),(Join-
 
 Push-Location $Src
 try {
-    Write-Host "=== Pass 1: dynamic build (lua51.dll + import lib) ==="
-    & cmd /c "msvcbuild.bat"
-    if ($LASTEXITCODE -ne 0) { throw "msvcbuild.bat (dynamic) failed" }
+    # Patch msvcbuild.bat's LJLIB variable to pass /Brepro to lib.exe. The
+    # upstream script's static-archive step runs lib.exe directly, which does
+    # NOT read the `LINK` env var — so the /Brepro we set at the workflow
+    # level only reaches link.exe (DLL + import-lib builds), leaving the
+    # static archive with per-run timestamps. The fix: regex-replace LJLIB's
+    # definition in a sibling copy of the batch file and invoke that.
+    $patchedBat = "msvcbuild-reprobuild.bat"
+    (Get-Content "msvcbuild.bat" -Raw) `
+        -replace '@set LJLIB=lib /nologo /nodefaultlib', '@set LJLIB=lib /nologo /nodefaultlib /Brepro' `
+        | Set-Content -Path $patchedBat -NoNewline -Encoding ASCII
 
-    # Stash dynamic outputs under unique names so the static pass can't clobber them.
-    Copy-Item -Force "lua51.dll" (Join-Path $Stage "bin/luajit.dll")
-    Copy-Item -Force "lua51.lib" (Join-Path $Stage "lib/luajit.lib")
+    try {
+        Write-Host "=== Pass 1: dynamic build (lua51.dll + import lib) ==="
+        & cmd /c $patchedBat
+        if ($LASTEXITCODE -ne 0) { throw "msvcbuild.bat (dynamic) failed" }
 
-    # Wipe leftover outputs from pass 1 so pass 2 starts clean.
-    Remove-Item -Force -ErrorAction SilentlyContinue `
-        "lua51.dll","lua51.lib","lua51.exp","luajit.exe","*.pdb","*.ilk"
+        # Stash dynamic outputs under unique names so the static pass can't clobber them.
+        Copy-Item -Force "lua51.dll" (Join-Path $Stage "bin/luajit.dll")
+        Copy-Item -Force "lua51.lib" (Join-Path $Stage "lib/luajit.lib")
 
-    Write-Host "=== Pass 2: static build (luajit-static.lib) ==="
-    & cmd /c "msvcbuild.bat static"
-    if ($LASTEXITCODE -ne 0) { throw "msvcbuild.bat (static) failed" }
+        # Wipe leftover outputs from pass 1 so pass 2 starts clean.
+        Remove-Item -Force -ErrorAction SilentlyContinue `
+            "lua51.dll","lua51.lib","lua51.exp","luajit.exe","*.pdb","*.ilk"
 
-    # In static mode msvcbuild.bat writes the static archive as lua51.lib.
-    if (-not (Test-Path "lua51.lib")) { throw "static build did not produce lua51.lib" }
-    Copy-Item -Force "lua51.lib" (Join-Path $Stage "lib/luajit-static.lib")
+        Write-Host "=== Pass 2: static build (luajit-static.lib) ==="
+        & cmd /c "$patchedBat static"
+        if ($LASTEXITCODE -ne 0) { throw "msvcbuild.bat (static) failed" }
 
-    # Stage headers.
-    foreach ($h in "lua.h","lualib.h","lauxlib.h","luaconf.h","luajit.h") {
-        Copy-Item -Force $h (Join-Path $Stage "include" $h)
+        # In static mode msvcbuild.bat writes the static archive as lua51.lib.
+        if (-not (Test-Path "lua51.lib")) { throw "static build did not produce lua51.lib" }
+        Copy-Item -Force "lua51.lib" (Join-Path $Stage "lib/luajit-static.lib")
+
+        # Stage headers.
+        foreach ($h in "lua.h","lualib.h","lauxlib.h","luaconf.h","luajit.h") {
+            Copy-Item -Force $h (Join-Path $Stage "include" $h)
+        }
+    } finally {
+        Remove-Item -Force -ErrorAction SilentlyContinue $patchedBat
     }
 }
 finally {
