@@ -58,11 +58,7 @@ run_smoke_tests() {
     TESTS_BUILD="$(pwd)/tests-build"
 
     rm -rf "$TESTS_BUILD"
-    # Default generator (Unix Makefiles) works everywhere this helper runs —
-    # Linux, macOS, MSYS2 mingw — and `make` is already in the toolchain.
-    # MSVC uses Ninja explicitly via build-luajit-msvc.ps1 (it's pre-installed
-    # with VS2022).
-    cmake -S "$TESTS_SRC" -B "$TESTS_BUILD" \
+    cmake -S "$TESTS_SRC" -B "$TESTS_BUILD" -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
         -DSTAGE_DIR="$STAGE"
     cmake --build "$TESTS_BUILD" --config Release --parallel
