@@ -38,9 +38,13 @@ stage_headers_vendored_lua() {
                    "$LUASRC/luaconf.h" "$STAGE/include/"
 }
 
-# Common XCFLAGS for reproducibility (GCC/Clang only).
-# Siblings pass -ffile-prefix-map via CMake; replicate here.
-REPRO_XCFLAGS="-ffile-prefix-map=$(cd "$SRC/.." && pwd)=."
+# Common XCFLAGS for reproducibility (GCC/Clang only). Siblings (BLAKE3,
+# lz4, xxHash, zstd) apply both of these via CMake's add_compile_options;
+# we replicate here because LuaJIT drives its own Makefile.
+#   -ffile-prefix-map  → rewrites __FILE__ literals baked into object files
+#   -fdebug-prefix-map → rewrites source paths embedded in DWARF/PDB info
+REPRO_ROOT="$(cd "$SRC/.." && pwd)"
+REPRO_XCFLAGS="-ffile-prefix-map=$REPRO_ROOT=. -fdebug-prefix-map=$REPRO_ROOT=."
 
 J="$(nproc_portable)"
 

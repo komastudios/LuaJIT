@@ -17,8 +17,18 @@ permissions:
 
 env:
   BUILD_TYPE: Release
+  # Deterministic-build knobs applied to every step in the workflow.
+  # - SOURCE_DATE_EPOCH is pinned to the commit timestamp by the
+  #   "Set Deterministic Environment" step below; the 0 here is a safety
+  #   default in case that step is ever skipped.
+  # - ZERO_AR_DATE tells Apple's ar to zero member timestamps.
+  # - TZ + LC_ALL remove timezone- and locale-dependent output in any
+  #   step that shells out to commands whose output leaks into the build
+  #   (e.g. `date`, `sort`, formatted `ls`).
   ZERO_AR_DATE: 1
   SOURCE_DATE_EPOCH: 0
+  TZ: UTC
+  LC_ALL: C
 
 jobs:
   build:
@@ -185,6 +195,15 @@ jobs:
       - name: Build (MSVC)
         if: matrix.msvc
         shell: pwsh
+        env:
+          # cl.exe / link.exe read these env vars and treat their contents as
+          # additional command-line options prepended to every invocation.
+          # This is how we inject deterministic-build flags without patching
+          # msvcbuild.bat:
+          #   /Brepro   → reproducible PE timestamps + PDB GUIDs
+          #   /pathmap  → rewrites the source-root absolute path in debug info
+          CL:   "/Brepro /pathmap:${{ github.workspace }}=."
+          LINK: "/Brepro"
         run: ./.github/scripts/build-luajit-msvc.ps1 -Stage "${{ github.workspace }}/dist"
 
       - name: Smoke test

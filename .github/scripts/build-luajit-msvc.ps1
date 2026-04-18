@@ -2,6 +2,11 @@
 # Build LuaJIT on Windows with MSVC. Expects the MSVC environment to already
 # be primed (INCLUDE/LIB/PATH set) — use ilammy/msvc-dev-cmd before invoking.
 #
+# Deterministic-build flags are injected via the `CL` and `LINK` environment
+# variables (set at the workflow-step level in .github/workflows/unity.yml);
+# cl.exe and link.exe prepend their contents to every invocation, so
+# msvcbuild.bat picks them up without modification.
+#
 # Produces the artifact layout consumed by AutobahnRacer/download_plugins.ps1:
 #   dist/bin/luajit.dll
 #   dist/lib/luajit.lib            (import lib for the dll)
