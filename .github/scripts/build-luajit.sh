@@ -161,7 +161,7 @@ case "${TARGET:?TARGET env var is required}" in
     ios-arm64)
         SDK_PATH="$(xcrun --sdk iphoneos --show-sdk-path)"
         CLANG="$(xcrun --sdk iphoneos -f clang)"
-        IOS_FLAGS="-arch arm64 -isysroot $SDK_PATH -miphoneos-version-min=12.0 -fembed-bitcode-marker"
+        IOS_FLAGS="-arch arm64 -isysroot $SDK_PATH -miphoneos-version-min=12.0"
         export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-10.13}"
 
         make -C "$SRC" clean
