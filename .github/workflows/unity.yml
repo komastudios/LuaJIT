@@ -91,7 +91,7 @@ jobs:
           # LuaJIT has no WASM backend, so this artifact ships vendored
           # vanilla Lua 5.1.5 (ABI-compatible with LuaJIT at the lua_* level)
           # built with emcc. See vendor/lua5.1/ and build-luajit.sh.
-          - name: "Emscripten (wasm32, vanilla Lua 5.1.5)"
+          - name: "Emscripten (wasm32)"
             artifact: "emscripten-wasm"
             target: "emscripten-wasm"
             os: ubuntu-22.04
